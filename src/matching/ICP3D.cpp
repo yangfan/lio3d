@@ -33,7 +33,7 @@ bool ICP3D::align_p2p(Sophus::SE3d &Tts) {
     int valid_cnt = 0;
     double sq_err = 0.0;
 
-    std::for_each(std::execution::unseq, idx.begin(), idx.end(),
+    std::for_each(std::execution::par_unseq, idx.begin(), idx.end(),
                   [this, &source_transformed, &pose](const size_t sid) {
                     source_transformed[sid] = pose * source_cloud_[sid];
                   });
@@ -45,7 +45,7 @@ bool ICP3D::align_p2p(Sophus::SE3d &Tts) {
                                    nearest_dist);
 
     std::for_each(
-        std::execution::unseq, idx.begin(), idx.end(),
+        std::execution::par_unseq, idx.begin(), idx.end(),
         [this, &pose, &Js, &Es, &valid, &valid_cnt, &sq_err, &nearest_idx,
          &nearest_dist, &source_transformed](const size_t sid) {
           if (nearest_dist[sid][0] > param_.max_dist) {
@@ -68,9 +68,9 @@ bool ICP3D::align_p2p(Sophus::SE3d &Tts) {
     double avg_err = sq_err / int(valid_cnt);
     LOG(INFO) << "It " << i << " sq err: " << sq_err
               << ", valid cnt: " << valid_cnt << ", avg err: " << avg_err;
-    if (avg_err > last_err) {
-      break;
-    }
+    // if (avg_err > last_err) {
+    //   break;
+    // }
     last_err = avg_err;
 
     auto S = std::accumulate(
@@ -124,7 +124,7 @@ bool ICP3D::align_p2l(Sophus::SE3d &Tts) {
     double sq_err = 0.0;
     int valid_cnt = 0;
 
-    std::for_each(std::execution::unseq, idx.begin(), idx.end(),
+    std::for_each(std::execution::par_unseq, idx.begin(), idx.end(),
                   [this, &source_transformed, &pose](const size_t sid) {
                     source_transformed[sid] = pose * source_cloud_[sid];
                   });
@@ -132,13 +132,13 @@ bool ICP3D::align_p2l(Sophus::SE3d &Tts) {
     std::vector<std::vector<double>> nearest_dist;
     nearest_idx.reserve(sz);
     nearest_dist.reserve(sz);
-    kd_tree_.nearest_neighbors_kmt(source_transformed, 5, nearest_idx,
-                                   nearest_dist);
+    kd_tree_.nearest_neighbors_kmt(source_transformed, param_.fitting_num,
+                                   nearest_idx, nearest_dist);
 
-    std::for_each(std::execution::unseq, idx.begin(), idx.end(),
+    std::for_each(std::execution::par_unseq, idx.begin(), idx.end(),
                   [this, &pose, &valid, &nearest_idx, &es, &Js, &sq_err,
                    &valid_cnt, &source_transformed](const int sid) {
-                    if (nearest_idx.size() < 5) {
+                    if (nearest_idx.size() < param_.fitting_num) {
                       valid[sid] = false;
                       return;
                     }
@@ -206,7 +206,8 @@ bool ICP3D::fitting_line(const std::vector<int> &tidx, Eigen::Vector3d &p0,
     return false;
   }
   p0 = std::accumulate(tidx.begin(), tidx.end(), Eigen::Vector3d::Zero().eval(),
-                       [this](const Eigen::Vector3d &sum, const int tid) {
+                       [this](const Eigen::Vector3d &sum,
+                              const int tid) -> Eigen::Vector3d {
                          return sum + target_cloud_[tid];
                        }) /
        tidx.size();
@@ -243,19 +244,19 @@ bool ICP3D::align_p2pl(Sophus::SE3d &Tts) {
 
   for (int i = 0; i < param_.iterations; ++i) {
 
-    std::for_each(std::execution::unseq, idx.begin(), idx.end(),
+    std::for_each(std::execution::par_unseq, idx.begin(), idx.end(),
                   [&pose, &source_transformed, this](const size_t sid) {
                     source_transformed[sid] = pose * source_cloud_[sid];
                   });
-    kd_tree_.nearest_neighbors_kmt(source_transformed, 5, nearest_idx,
-                                   nearest_dist);
+    kd_tree_.nearest_neighbors_kmt(source_transformed, param_.fitting_num,
+                                   nearest_idx, nearest_dist);
     double sq_err = 0.0;
     int valid_cnt = 0;
     std::for_each(
-        std::execution::unseq, idx.begin(), idx.end(),
+        std::execution::par_unseq, idx.begin(), idx.end(),
         [&sq_err, &valid_cnt, &nearest_idx, &valid, &source_transformed, &Js,
          &es, &pose, this](const size_t sid) {
-          if (nearest_idx[sid].size() < 5) {
+          if (nearest_idx[sid].size() < param_.fitting_num) {
             valid[sid] = false;
             return;
           }

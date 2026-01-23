@@ -50,7 +50,7 @@ TEST(ICP, Point2Point) {
   double elapsed =
       std::chrono::duration_cast<std::chrono::milliseconds>(end - start)
           .count();
-  LOG(INFO) << "ICP point to point took " << elapsed << " ms.";
+  LOG(INFO) << "ICP point to point took " << elapsed << " ms."; // 233 ms
 
   std::ifstream ifs(FLAGS_data_path + "/input/ground_truth.txt");
   Sophus::SE3d ground_truth;
@@ -119,7 +119,7 @@ TEST(ICP, Point2Line) {
   double elapsed =
       std::chrono::duration_cast<std::chrono::milliseconds>(end - start)
           .count();
-  LOG(INFO) << "ICP point to line took " << elapsed << " ms.";
+  LOG(INFO) << "ICP point to line took " << elapsed << " ms."; // 369 ms
 
   std::ifstream ifs(FLAGS_data_path + "/input/ground_truth.txt");
   Sophus::SE3d ground_truth;
@@ -188,7 +188,7 @@ TEST(ICP, Point2Plane) {
   double elapsed =
       std::chrono::duration_cast<std::chrono::milliseconds>(end - start)
           .count();
-  LOG(INFO) << "ICP point to plane took " << elapsed << " ms.";
+  LOG(INFO) << "ICP point to plane took " << elapsed << " ms."; // 97 ms
 
   std::ifstream ifs(FLAGS_data_path + "/input/ground_truth.txt");
   Sophus::SE3d ground_truth;

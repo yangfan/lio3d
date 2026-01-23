@@ -19,6 +19,7 @@ public:
     double max_dist = 1.0;
     int min_valid = 10;
     double eps = 1e-3;
+    size_t fitting_num = 5;
   };
 
   ICP3D() = default;
