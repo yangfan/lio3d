@@ -4,13 +4,14 @@
 #include <vector>
 
 #include <Eigen/Core>
+#include <pcl/point_cloud.h>
+#include <pcl/point_types.h>
 #include <sophus/se3.hpp>
 
 class NDT {
 public:
   using VoxelId = Eigen::Vector3i;
-  using PointCloud3D =
-      std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>>;
+  using PointCloudPtr = pcl::PointCloud<pcl::PointXYZI>::Ptr;
   using Mat36 = Eigen::Matrix<double, 3, 6>;
   using Mat6 = Eigen::Matrix<double, 6, 6>;
   using Vec6 = Eigen::Matrix<double, 6, 1>;
@@ -47,13 +48,13 @@ public:
 
   void set_params(const Params &param) { params_ = param; }
   void set_neighbors(const NeighborType type);
-  bool set_target_cloud(PointCloud3D &&cloud);
-  bool set_source_cloud(PointCloud3D &&cloud);
+  bool set_target_cloud(PointCloudPtr cloud);
+  bool set_source_cloud(PointCloudPtr cloud);
 
-  bool nearest_neighbors(const Eigen::Vector3d &query_pt, const size_t k,
+  bool nearest_neighbors(const pcl::PointXYZI &query_pt, const size_t k,
                          std::vector<int> &nearest_idx,
                          std::vector<double> &nearest_dist);
-  bool nearest_neighbors_kmt(const PointCloud3D &query_pc, const size_t k,
+  bool nearest_neighbors_kmt(const PointCloudPtr &query_pc, const size_t k,
                              std::vector<std::vector<int>> &nearest_idx,
                              std::vector<std::vector<double>> &nearest_dist);
   bool align(Sophus::SE3d &Tts);
@@ -72,8 +73,8 @@ private:
 
   Params params_;
 
-  PointCloud3D target_cloud_;
-  PointCloud3D source_cloud_;
+  PointCloudPtr target_cloud_;
+  PointCloudPtr source_cloud_;
   Eigen::Vector3d target_center_ = Eigen::Vector3d::Zero();
   Eigen::Vector3d source_center_ = Eigen::Vector3d::Zero();
 
@@ -82,4 +83,8 @@ private:
   bool build_grid();
   bool mean_cov(const Voxel &voxel, Eigen::Vector3d &mean,
                 Eigen::Matrix3d &cov) const;
+
+  const Eigen::Vector3d pos(const pcl::PointXYZI &pt) const {
+    return pt.getVector3fMap().cast<double>();
+  }
 };

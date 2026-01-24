@@ -25,40 +25,52 @@ void NDT::set_neighbors(const NeighborType type) {
   }
 }
 
-bool NDT::set_target_cloud(NDT::PointCloud3D &&cloud) {
-  target_cloud_ = std::move(cloud);
-  if (target_cloud_.empty()) {
+bool NDT::set_target_cloud(NDT::PointCloudPtr cloud) {
+  target_cloud_ = cloud;
+  if (target_cloud_->empty()) {
     return false;
   }
-  target_center_ = std::accumulate(target_cloud_.begin(), target_cloud_.end(),
-                                   Eigen::Vector3d::Zero().eval()) /
-                   target_cloud_.size();
+  target_center_ =
+      std::accumulate(target_cloud_->points.begin(),
+                      target_cloud_->points.end(),
+                      Eigen::Vector3d::Zero().eval(),
+                      [this](const Eigen::Vector3d &sum,
+                             const pcl::PointXYZI &pt) -> Eigen::Vector3d {
+                        return sum + pos(pt);
+                      }) /
+      target_cloud_->size();
   LOG(INFO) << "target center: " << target_center_.transpose();
   return build_grid();
 }
 
-bool NDT::set_source_cloud(NDT::PointCloud3D &&cloud) {
-  source_cloud_ = std::move(cloud);
-  if (source_cloud_.empty()) {
+bool NDT::set_source_cloud(NDT::PointCloudPtr cloud) {
+  source_cloud_ = cloud;
+  if (source_cloud_->empty()) {
     return false;
   }
-  source_center_ = std::accumulate(source_cloud_.begin(), source_cloud_.end(),
-                                   Eigen::Vector3d::Zero().eval()) /
-                   source_cloud_.size();
+  source_center_ =
+      std::accumulate(source_cloud_->points.begin(),
+                      source_cloud_->points.end(),
+                      Eigen::Vector3d::Zero().eval(),
+                      [this](const Eigen::Vector3d &sum,
+                             const pcl::PointXYZI &pt) -> Eigen::Vector3d {
+                        return sum + pos(pt);
+                      }) /
+      source_cloud_->size();
   LOG(INFO) << "source center: " << source_center_.transpose();
 
   return true;
 }
 
 bool NDT::build_grid() {
-  if (target_cloud_.empty()) {
+  if (target_cloud_->empty()) {
     return false;
   }
-  std::vector<size_t> idx(target_cloud_.size());
+  std::vector<size_t> idx(target_cloud_->size());
   std::iota(idx.begin(), idx.end(), 0);
 
   std::for_each(idx.begin(), idx.end(), [this](const size_t tid) {
-    const VoxelId vid = get_id(target_cloud_[tid]);
+    const VoxelId vid = get_id(pos(target_cloud_->points[tid]));
     if (grid_.find(vid) == grid_.end()) {
       grid_.insert(std::pair(vid, Voxel(tid)));
     } else {
@@ -107,7 +119,7 @@ bool NDT::mean_cov(const Voxel &voxel, Eigen::Vector3d &mean,
                          Eigen::Vector3d::Zero().eval(),
                          [this](const Eigen::Vector3d &sum,
                                 const size_t pid) -> Eigen::Vector3d {
-                           return sum + target_cloud_[pid];
+                           return sum + pos(target_cloud_->points[pid]);
                          }) /
          voxel.pids.size();
   cov = std::accumulate(voxel.pids.begin(), voxel.pids.end(),
@@ -115,14 +127,14 @@ bool NDT::mean_cov(const Voxel &voxel, Eigen::Vector3d &mean,
                         [&mean, this](const Eigen::Matrix3d &sum,
                                       const size_t pid) -> Eigen::Matrix3d {
                           const Eigen::Vector3d diff =
-                              target_cloud_[pid] - mean;
+                              pos(target_cloud_->points[pid]) - mean;
                           return sum + diff * diff.transpose();
                         }) /
         (voxel.pids.size() - 1);
   return true;
 }
 
-bool NDT::nearest_neighbors(const Eigen::Vector3d &query_pt, const size_t k,
+bool NDT::nearest_neighbors(const pcl::PointXYZI &query_pt, const size_t k,
                             std::vector<int> &nearest_idx,
                             std::vector<double> &nearest_dist) {
   if (grid_.empty()) {
@@ -138,7 +150,7 @@ bool NDT::nearest_neighbors(const Eigen::Vector3d &query_pt, const size_t k,
 
   std::priority_queue<std::pair<double, int>> candidates;
 
-  const VoxelId cur_id = get_id(query_pt);
+  const VoxelId cur_id = get_id(pos(query_pt));
   for (const auto &nb : neighbors_) {
 
     auto nb_it = grid_.find(cur_id + nb);
@@ -146,7 +158,8 @@ bool NDT::nearest_neighbors(const Eigen::Vector3d &query_pt, const size_t k,
       continue;
     }
     for (const size_t tid : nb_it->second.pids) {
-      const double sq_dist = (query_pt - target_cloud_[tid]).squaredNorm();
+      const double sq_dist =
+          (pos(query_pt) - pos(target_cloud_->points[tid])).squaredNorm();
       if (candidates.size() < k) {
         candidates.emplace(sq_dist, tid);
       } else if (candidates.top().first > sq_dist) {
@@ -169,13 +182,13 @@ bool NDT::nearest_neighbors(const Eigen::Vector3d &query_pt, const size_t k,
 }
 
 bool NDT::nearest_neighbors_kmt(
-    const PointCloud3D &query_pc, const size_t k,
+    const PointCloudPtr &query_pc, const size_t k,
     std::vector<std::vector<int>> &nearest_idx,
     std::vector<std::vector<double>> &nearest_dist) {
-  if (query_pc.empty() || grid_.empty()) {
+  if (query_pc->empty() || grid_.empty()) {
     return false;
   }
-  const size_t sz = query_pc.size();
+  const size_t sz = query_pc->size();
   nearest_idx.resize(sz);
   nearest_dist.resize(sz);
 
@@ -185,7 +198,7 @@ bool NDT::nearest_neighbors_kmt(
   std::for_each(
       std::execution::par_unseq, idx.begin(), idx.end(),
       [this, &k, &query_pc, &nearest_idx, &nearest_dist](const size_t qid) {
-        nearest_neighbors(query_pc[qid], k, nearest_idx[qid],
+        nearest_neighbors(query_pc->points[qid], k, nearest_idx[qid],
                           nearest_dist[qid]);
       });
 
@@ -193,13 +206,13 @@ bool NDT::nearest_neighbors_kmt(
 }
 
 bool NDT::align(Sophus::SE3d &Tts) {
-  if (target_cloud_.empty() || source_cloud_.empty()) {
+  if (target_cloud_->empty() || source_cloud_->empty()) {
     return false;
   }
   if (neighbors_.empty()) {
     set_neighbors(params_.nb_type);
   }
-  const size_t sz = source_cloud_.size();
+  const size_t sz = source_cloud_->size();
   size_t nb_num = neighbors_.size();
   const size_t edge_sz = sz * nb_num;
 
@@ -223,7 +236,8 @@ bool NDT::align(Sophus::SE3d &Tts) {
     std::for_each(std::execution::par_unseq, idx.begin(), idx.end(),
                   [this, &Js, &es, &valid, &vids, &cur_chi2, &valid_cnt,
                    &nb_num, &pose](const size_t sid) {
-                    const Eigen::Vector3d query_pt = pose * source_cloud_[sid];
+                    const Eigen::Vector3d query_pt =
+                        pose * pos(source_cloud_->points[sid]);
                     const VoxelId cur_id = get_id(query_pt);
 
                     for (size_t nid = 0; nid < nb_num; ++nid) {
@@ -245,7 +259,7 @@ bool NDT::align(Sophus::SE3d &Tts) {
                       }
                       Js[eid].block<3, 3>(0, 0) =
                           -pose.so3().matrix() *
-                          Sophus::SO3d::hat(source_cloud_[sid]);
+                          Sophus::SO3d::hat(pos(source_cloud_->points[sid]));
                       Js[eid].block<3, 3>(0, 3) = Eigen::Matrix3d::Identity();
                       vids[eid] = nb_it->first;
                       valid[eid] = true;

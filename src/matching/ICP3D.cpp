@@ -68,9 +68,9 @@ bool ICP3D::align_p2p(Sophus::SE3d &Tts) {
     double avg_err = sq_err / int(valid_cnt);
     LOG(INFO) << "It " << i << " sq err: " << sq_err
               << ", valid cnt: " << valid_cnt << ", avg err: " << avg_err;
-    // if (avg_err > last_err) {
-    //   break;
-    // }
+    if (avg_err > 1.5 * last_err) {
+      break;
+    }
     last_err = avg_err;
 
     auto S = std::accumulate(

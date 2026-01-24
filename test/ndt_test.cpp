@@ -56,20 +56,14 @@ pcl_PointCloud::Ptr DownSampling(pcl_PointCloud::Ptr origin,
 }
 
 TEST(NDT, Build) {
-  pcl_PointCloud::Ptr cloud(new pcl_PointCloud);
-  pcl::io::loadPCDFile(FLAGS_data_path + "input/target.pcd", *cloud);
-  LOG(INFO) << "Number of points: " << cloud->size();
+  NDT::PointCloudPtr target(new pcl_PointCloud);
+  pcl::io::loadPCDFile(FLAGS_data_path + "input/target.pcd", *target);
+  LOG(INFO) << "Number of points: " << target->size();
 
   NDT ndt;
-  NDT::PointCloud3D target;
-  target.reserve(cloud->size());
-  for (const auto &pt : cloud->points) {
-    target.emplace_back(pt.getVector3fMap().cast<double>());
-  }
 
-  const auto tpc = target;
   auto start = std::chrono::steady_clock::now();
-  ndt.set_target_cloud(std::move(target));
+  ndt.set_target_cloud(target);
   auto end = std::chrono::steady_clock::now();
   const double elapse =
       std::chrono::duration_cast<std::chrono::milliseconds>(end - start)
@@ -87,8 +81,10 @@ TEST(NDT, Build) {
           Eigen::Vector3d mean;
           Eigen::Matrix3d cov;
           Eigen::Matrix3d info;
-          ComputeMeanAndCov(v.second.pids, mean, cov,
-                            [&tpc](const size_t &idx) { return (tpc[idx]); });
+          ComputeMeanAndCov(
+              v.second.pids, mean, cov, [&target](const size_t &idx) {
+                return (target->points[idx].getVector3fMap().cast<double>());
+              });
 
           Eigen::JacobiSVD svd(cov, Eigen::ComputeFullU | Eigen::ComputeFullV);
           Eigen::Vector3d lambda = svd.singularValues();
@@ -127,6 +123,10 @@ TEST(NDT, KNN) {
   LOG(INFO) << "Downsampled point cloud1 size: " << cloud1->size();
   LOG(INFO) << "Downsampled point cloud2 size: " << cloud2->size();
 
+  NDT::PointCloudPtr target = cloud1;
+  NDT::PointCloudPtr source = cloud2;
+  LOG(INFO) << "number of query points: " << source->size();
+
   pcl::search::KdTree<pcl_Point> kdtree;
   kdtree.setInputCloud(cloud1);
 
@@ -143,24 +143,23 @@ TEST(NDT, KNN) {
           .count();
   LOG(INFO) << "pcl kd k cloud search took " << elapse << " ms.";
 
-  NDT::PointCloud3D target;
-  target.reserve(cloud1->size());
+  KDTree<double, 3>::PointCloud kd_target;
+  kd_target.reserve(cloud1->size());
   for (const auto &pt : cloud1->points) {
-    target.emplace_back(pt.getVector3fMap().cast<double>());
+    kd_target.emplace_back(pt.getVector3fMap().cast<double>());
   }
-  NDT::PointCloud3D source;
-  source.reserve(cloud2->size());
+  KDTree<double, 3>::PointCloud kd_source;
+  kd_source.reserve(cloud2->size());
   for (size_t i = 0; i < cloud2->size(); ++i) {
-    source.emplace_back(cloud2->points[i].getVector3fMap().cast<double>());
+    kd_source.emplace_back(cloud2->points[i].getVector3fMap().cast<double>());
   }
-  LOG(INFO) << "number of query points: " << source.size();
 
   KDTree<double, 3> kd;
-  kd.setInputCloud(target);
+  kd.setInputCloud(kd_target);
   std::vector<std::vector<int>> kd_idx;
   std::vector<std::vector<double>> kd_dist;
   start = std::chrono::steady_clock::now();
-  kd.nearest_neighbors_kmt(source, 5, kd_idx, kd_dist);
+  kd.nearest_neighbors_kmt(kd_source, 5, kd_idx, kd_dist);
   end = std::chrono::steady_clock::now();
   elapse = std::chrono::duration_cast<std::chrono::milliseconds>(end - start)
                .count();
@@ -171,7 +170,7 @@ TEST(NDT, KNN) {
   params.nb_type = NDT::NeighborType::NB6;
   params.vx_size = 0.5;
   ndt.set_params(params);
-  ndt.set_target_cloud(std::move(target));
+  ndt.set_target_cloud(target);
 
   elapse = 0.0;
   for (size_t i = 0; i < cloud2->size(); ++i) {
@@ -179,7 +178,7 @@ TEST(NDT, KNN) {
     std::vector<double> nearest_dist;
 
     start = std::chrono::steady_clock::now();
-    ndt.nearest_neighbors(source[i], 3, nearest_idx, nearest_dist);
+    ndt.nearest_neighbors(source->points[i], 3, nearest_idx, nearest_dist);
     end = std::chrono::steady_clock::now();
     elapse += std::chrono::duration_cast<std::chrono::milliseconds>(end - start)
                   .count();
@@ -215,35 +214,23 @@ TEST(NDT, Align) {
   pcl::io::loadPCDFile(FLAGS_data_path + "input/target.pcd", *tc);
   pcl::io::loadPCDFile(FLAGS_data_path + "input/source.pcd", *sc);
 
-  NDT::PointCloud3D target, source;
-  target.reserve(tc->size());
-  source.reserve(sc->size());
-  std::for_each(tc->points.begin(), tc->points.end(),
-                [&target](const pcl::PointXYZI &pt) {
-                  target.emplace_back(pt.getVector3fMap().cast<double>());
-                });
-  std::for_each(sc->points.begin(), sc->points.end(),
-                [&source](const pcl::PointXYZI &ps) {
-                  source.emplace_back(ps.getVector3fMap().cast<double>());
-                });
-  EXPECT_EQ(target.size(), tc->size());
-  EXPECT_EQ(source.size(), sc->size());
-  LOG(INFO) << "size of source: " << source.size();
-  LOG(INFO) << "size of target: " << target.size();
+  NDT::PointCloudPtr target = tc;
+  NDT::PointCloudPtr source = sc;
+  LOG(INFO) << "size of source: " << source->size();
+  LOG(INFO) << "size of target: " << target->size();
 
   NDT ndt;
   NDT::Params params;
   params.nb_type = NDT::NeighborType::NB0;
   params.vx_size = 0.5;
   ndt.set_params(params);
-  ndt.set_target_cloud(std::move(target));
-  ndt.set_source_cloud(std::move(source));
+  ndt.set_target_cloud(target);
+  ndt.set_source_cloud(source);
 
   Sophus::SE3d Tts;
 
   auto start = std::chrono::steady_clock::now();
   EXPECT_TRUE(ndt.align(Tts));
-  //   EXPECT_TRUE(ndt.AlignNdt(Tts));
   auto end = std::chrono::steady_clock::now();
   double elapsed =
       std::chrono::duration_cast<std::chrono::milliseconds>(end - start)
