@@ -44,9 +44,13 @@ public:
     size_t min_vx_pt = 3;
     double max_dist = 1.0;
     double chi2_th = 20.0;
+    bool guess_translation = false;
   };
 
-  void set_params(const Params &param) { params_ = param; }
+  void set_params(const Params &param) {
+    params_ = param;
+    set_neighbors(params_.nb_type);
+  }
   void set_neighbors(const NeighborType type);
   bool set_target_cloud(PointCloudPtr cloud);
   bool set_source_cloud(PointCloudPtr cloud);

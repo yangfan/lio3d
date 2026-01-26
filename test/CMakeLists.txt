@@ -6,7 +6,19 @@ target_include_directories(icp_test PRIVATE ${CMAKE_SOURCE_DIR}/include/lio3d/ma
 
 add_executable(ndt_test ndt_test.cpp)
 target_link_libraries(ndt_test NDT gtest glog::glog ${GFLAGS_LIBRARIES} ${PCL_LIBRARIES} Eigen3::Eigen Sophus::Sophus tbb)
-target_include_directories(ndt_test PRIVATE ${CMAKE_SOURCE_DIR}/include/lio3d/matching)
+target_include_directories(ndt_test PRIVATE
+    ${CMAKE_SOURCE_DIR}/include/lio3d/matching
+)
+
+add_executable(tools_test tools_test.cpp)
+target_link_libraries(tools_test NDT tools pcl_conversions::pcl_conversions gtest glog::glog ${GFLAGS_LIBRARIES} ${PCL_LIBRARIES} Eigen3::Eigen Sophus::Sophus tbb)
+target_include_directories(tools_test PRIVATE ${CMAKE_SOURCE_DIR}/include/lio3d)
+
+add_executable(ndt_lo_test ndt_lo_test.cpp)
+target_link_libraries(ndt_lo_test lo NDT tools pcl_conversions::pcl_conversions gtest glog::glog ${GFLAGS_LIBRARIES} ${PCL_LIBRARIES} Eigen3::Eigen Sophus::Sophus)
+target_include_directories(ndt_lo_test PRIVATE
+    ${CMAKE_SOURCE_DIR}/include/lio3d
+)
 
 include(GoogleTest)
-gtest_discover_tests(icp_test)
+gtest_discover_tests(icp_test ndt_test tools_test)

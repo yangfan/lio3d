@@ -169,6 +169,7 @@ TEST(NDT, KNN) {
   NDT::Params params;
   params.nb_type = NDT::NeighborType::NB6;
   params.vx_size = 0.5;
+  params.guess_translation = true;
   ndt.set_params(params);
   ndt.set_target_cloud(target);
 
@@ -223,6 +224,7 @@ TEST(NDT, Align) {
   NDT::Params params;
   params.nb_type = NDT::NeighborType::NB0;
   params.vx_size = 0.5;
+  params.guess_translation = true;
   ndt.set_params(params);
   ndt.set_target_cloud(target);
   ndt.set_source_cloud(source);

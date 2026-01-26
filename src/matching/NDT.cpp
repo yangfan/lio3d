@@ -30,16 +30,18 @@ bool NDT::set_target_cloud(NDT::PointCloudPtr cloud) {
   if (target_cloud_->empty()) {
     return false;
   }
-  target_center_ =
-      std::accumulate(target_cloud_->points.begin(),
-                      target_cloud_->points.end(),
-                      Eigen::Vector3d::Zero().eval(),
-                      [this](const Eigen::Vector3d &sum,
-                             const pcl::PointXYZI &pt) -> Eigen::Vector3d {
-                        return sum + pos(pt);
-                      }) /
-      target_cloud_->size();
-  LOG(INFO) << "target center: " << target_center_.transpose();
+  if (params_.guess_translation) {
+    target_center_ =
+        std::accumulate(target_cloud_->points.begin(),
+                        target_cloud_->points.end(),
+                        Eigen::Vector3d::Zero().eval(),
+                        [this](const Eigen::Vector3d &sum,
+                               const pcl::PointXYZI &pt) -> Eigen::Vector3d {
+                          return sum + pos(pt);
+                        }) /
+        target_cloud_->size();
+    LOG(INFO) << "target center: " << target_center_.transpose();
+  }
   return build_grid();
 }
 
@@ -48,16 +50,18 @@ bool NDT::set_source_cloud(NDT::PointCloudPtr cloud) {
   if (source_cloud_->empty()) {
     return false;
   }
-  source_center_ =
-      std::accumulate(source_cloud_->points.begin(),
-                      source_cloud_->points.end(),
-                      Eigen::Vector3d::Zero().eval(),
-                      [this](const Eigen::Vector3d &sum,
-                             const pcl::PointXYZI &pt) -> Eigen::Vector3d {
-                        return sum + pos(pt);
-                      }) /
-      source_cloud_->size();
-  LOG(INFO) << "source center: " << source_center_.transpose();
+  if (params_.guess_translation) {
+    source_center_ =
+        std::accumulate(source_cloud_->points.begin(),
+                        source_cloud_->points.end(),
+                        Eigen::Vector3d::Zero().eval(),
+                        [this](const Eigen::Vector3d &sum,
+                               const pcl::PointXYZI &pt) -> Eigen::Vector3d {
+                          return sum + pos(pt);
+                        }) /
+        source_cloud_->size();
+    LOG(INFO) << "source center: " << source_center_.transpose();
+  }
 
   return true;
 }
@@ -66,6 +70,7 @@ bool NDT::build_grid() {
   if (target_cloud_->empty()) {
     return false;
   }
+  grid_.clear();
   std::vector<size_t> idx(target_cloud_->size());
   std::iota(idx.begin(), idx.end(), 0);
 
@@ -217,8 +222,10 @@ bool NDT::align(Sophus::SE3d &Tts) {
   const size_t edge_sz = sz * nb_num;
 
   Sophus::SE3d pose = Tts;
-  pose.translation() = target_center_ - source_center_;
-  LOG(INFO) << "Initial translation: " << pose.translation().transpose();
+  if (params_.guess_translation) {
+    pose.translation() = target_center_ - source_center_;
+    LOG(INFO) << "Initial translation: " << pose.translation().transpose();
+  }
 
   std::vector<size_t> idx(sz);
   std::iota(idx.begin(), idx.end(), 0);
@@ -226,77 +233,74 @@ bool NDT::align(Sophus::SE3d &Tts) {
   std::vector<Mat36, Eigen::aligned_allocator<Mat36>> Js(edge_sz);
   std::vector<Vec3, Eigen::aligned_allocator<Vec3>> es(edge_sz);
   std::vector<VoxelId, Eigen::aligned_allocator<VoxelId>> vids(edge_sz);
-  std::vector<bool> valid(edge_sz, true);
+  std::vector<bool> valid(edge_sz, false);
 
   double last_chi2 = std::numeric_limits<double>::max();
   int valid_cnt = 0;
 
   for (int i = 0; i < params_.iterations; ++i) {
     double cur_chi2 = 0.0;
-    std::for_each(std::execution::par_unseq, idx.begin(), idx.end(),
-                  [this, &Js, &es, &valid, &vids, &cur_chi2, &valid_cnt,
-                   &nb_num, &pose](const size_t sid) {
-                    const Eigen::Vector3d query_pt =
-                        pose * pos(source_cloud_->points[sid]);
-                    const VoxelId cur_id = get_id(query_pt);
+    valid_cnt = 0;
 
-                    for (size_t nid = 0; nid < nb_num; ++nid) {
-                      const auto &nb = neighbors_[nid];
-                      auto nb_it = grid_.find(cur_id + nb);
-                      const size_t eid = sid * nb_num + nid;
-                      if (nb_it == grid_.end() ||
-                          nb_it->second.pids.size() < params_.min_vx_pt) {
-                        valid[eid] = false;
-                        continue;
-                      }
-                      es[eid] = query_pt - nb_it->second.mean;
-                      const double chi2 =
-                          es[eid].transpose() * nb_it->second.info * es[eid];
+    std::for_each(
+        std::execution::par_unseq, idx.begin(), idx.end(),
+        [this, &Js, &es, &valid, &vids, &cur_chi2, &valid_cnt, &nb_num,
+         &pose](const size_t sid) {
+          const Eigen::Vector3d query_pt =
+              pose * pos(source_cloud_->points[sid]);
+          const VoxelId cur_id = get_id(query_pt);
 
-                      if (chi2 > params_.chi2_th) {
-                        valid[eid] = false;
-                        continue;
-                      }
-                      Js[eid].block<3, 3>(0, 0) =
-                          -pose.so3().matrix() *
-                          Sophus::SO3d::hat(pos(source_cloud_->points[sid]));
-                      Js[eid].block<3, 3>(0, 3) = Eigen::Matrix3d::Identity();
-                      vids[eid] = nb_it->first;
-                      valid[eid] = true;
+          for (size_t nid = 0; nid < nb_num; ++nid) {
+            const auto &nb = neighbors_[nid];
+            auto nb_it = grid_.find(cur_id + nb);
+            const size_t eid = sid * nb_num + nid;
+            const Voxel &voxel = nb_it->second;
 
-                      cur_chi2 += chi2;
-                      valid_cnt++;
-                    }
-                  });
+            if (nb_it == grid_.end() || voxel.pids.size() < params_.min_vx_pt) {
+              valid[eid] = false;
+              continue;
+            }
+            es[eid] = query_pt - voxel.mean;
+            const double chi2 = es[eid].transpose() * voxel.info * es[eid];
+
+            if (std::isnan(chi2) || chi2 > params_.chi2_th) {
+              valid[eid] = false;
+              continue;
+            }
+            Js[eid].block<3, 3>(0, 0) =
+                -pose.so3().matrix() *
+                Sophus::SO3d::hat(pos(source_cloud_->points[sid]));
+            Js[eid].block<3, 3>(0, 3) = Eigen::Matrix3d::Identity();
+            vids[eid] = nb_it->first;
+            valid[eid] = true;
+
+            cur_chi2 += chi2;
+            valid_cnt++;
+          }
+        });
     if (valid_cnt < params_.min_valid) {
       return false;
     }
     const double avg_chi2 = cur_chi2 / valid_cnt;
     LOG(INFO) << "It " << i << " cur_chi2: " << cur_chi2
               << ", valid_cnt: " << valid_cnt << ", avg_chi2: " << avg_chi2;
-    if (avg_chi2 > last_chi2) {
+    if (avg_chi2 > 1.2 * last_chi2) {
+      LOG(INFO) << "Stop optimizing.";
       break;
     }
     last_chi2 = avg_chi2;
 
-    std::vector<size_t> eidx(edge_sz);
-    std::iota(eidx.begin(), eidx.end(), 0);
-
-    using linear_eq = std::pair<Mat6, Vec6>;
-    auto Hb = std::accumulate(
-        eidx.begin(), eidx.end(), linear_eq(Mat6::Zero(), Vec6::Zero()),
-        [&valid, &Js, &es, &vids, this](const linear_eq &sum,
-                                        const size_t eid) -> linear_eq {
-          if (valid[eid]) {
-            return linear_eq(sum.first + Js[eid].transpose() *
-                                             grid_[vids[eid]].info * Js[eid],
-                             sum.second - Js[eid].transpose() *
-                                              grid_[vids[eid]].info * es[eid]);
-          }
-          return sum;
-        });
-    Vec6 delta = Hb.first.ldlt().solve(Hb.second);
+    Mat6 H = Mat6::Zero();
+    Vec6 b = Vec6::Zero();
+    for (size_t eid = 0; eid < valid.size(); ++eid) {
+      if (valid[eid]) {
+        H += Js[eid].transpose() * grid_[vids[eid]].info * Js[eid];
+        b += -Js[eid].transpose() * grid_[vids[eid]].info * es[eid];
+      }
+    }
+    Vec6 delta = H.ldlt().solve(b);
     if (std::isnan(delta[0]) || delta.norm() < params_.eps) {
+      LOG(INFO) << "coverged, delta: " << delta.transpose();
       break;
     }
     pose.so3() = pose.so3() * Sophus::SO3d::exp(delta.head<3>());
