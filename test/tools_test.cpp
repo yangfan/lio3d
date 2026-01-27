@@ -14,7 +14,7 @@ DEFINE_string(topic_name, "/velodyne_points_0",
               "topic name of pointcloud data");
 
 TEST(Tools, Viewer) {
-  MapViewer viewer(0.5f);
+  MapViewer viewer("Map Viewer", 0.5f);
   BagIO bag_io(FLAGS_bag_file);
   bag_io
       .AddPointCloudHandle(

@@ -62,5 +62,4 @@ bool NDT_LO::save_map(const std::string &file) {
     return true;
   }
   return viewer_->save_map(file);
-  return true;
 }

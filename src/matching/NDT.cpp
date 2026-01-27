@@ -242,42 +242,43 @@ bool NDT::align(Sophus::SE3d &Tts) {
     double cur_chi2 = 0.0;
     valid_cnt = 0;
 
-    std::for_each(
-        std::execution::par_unseq, idx.begin(), idx.end(),
-        [this, &Js, &es, &valid, &vids, &cur_chi2, &valid_cnt, &nb_num,
-         &pose](const size_t sid) {
-          const Eigen::Vector3d query_pt =
-              pose * pos(source_cloud_->points[sid]);
-          const VoxelId cur_id = get_id(query_pt);
+    std::for_each(std::execution::par_unseq, idx.begin(), idx.end(),
+                  [this, &Js, &es, &valid, &vids, &cur_chi2, &valid_cnt,
+                   &nb_num, &pose](const size_t sid) {
+                    const Eigen::Vector3d query_pt =
+                        pose * pos(source_cloud_->points[sid]);
+                    const VoxelId cur_id = get_id(query_pt);
 
-          for (size_t nid = 0; nid < nb_num; ++nid) {
-            const auto &nb = neighbors_[nid];
-            auto nb_it = grid_.find(cur_id + nb);
-            const size_t eid = sid * nb_num + nid;
-            const Voxel &voxel = nb_it->second;
+                    for (size_t nid = 0; nid < nb_num; ++nid) {
+                      const auto &nb = neighbors_[nid];
+                      auto nb_it = grid_.find(cur_id + nb);
+                      const size_t eid = sid * nb_num + nid;
 
-            if (nb_it == grid_.end() || voxel.pids.size() < params_.min_vx_pt) {
-              valid[eid] = false;
-              continue;
-            }
-            es[eid] = query_pt - voxel.mean;
-            const double chi2 = es[eid].transpose() * voxel.info * es[eid];
+                      if (nb_it == grid_.end() ||
+                          nb_it->second.pids.size() < params_.min_vx_pt) {
+                        valid[eid] = false;
+                        continue;
+                      }
+                      const Voxel &voxel = nb_it->second;
+                      es[eid] = query_pt - voxel.mean;
+                      const double chi2 =
+                          es[eid].transpose() * voxel.info * es[eid];
 
-            if (std::isnan(chi2) || chi2 > params_.chi2_th) {
-              valid[eid] = false;
-              continue;
-            }
-            Js[eid].block<3, 3>(0, 0) =
-                -pose.so3().matrix() *
-                Sophus::SO3d::hat(pos(source_cloud_->points[sid]));
-            Js[eid].block<3, 3>(0, 3) = Eigen::Matrix3d::Identity();
-            vids[eid] = nb_it->first;
-            valid[eid] = true;
+                      if (std::isnan(chi2) || chi2 > params_.chi2_th) {
+                        valid[eid] = false;
+                        continue;
+                      }
+                      Js[eid].block<3, 3>(0, 0) =
+                          -pose.so3().matrix() *
+                          Sophus::SO3d::hat(pos(source_cloud_->points[sid]));
+                      Js[eid].block<3, 3>(0, 3) = Eigen::Matrix3d::Identity();
+                      vids[eid] = nb_it->first;
+                      valid[eid] = true;
 
-            cur_chi2 += chi2;
-            valid_cnt++;
-          }
-        });
+                      cur_chi2 += chi2;
+                      valid_cnt++;
+                    }
+                  });
     if (valid_cnt < params_.min_valid) {
       return false;
     }

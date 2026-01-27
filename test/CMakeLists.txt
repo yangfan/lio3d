@@ -20,5 +20,11 @@ target_include_directories(ndt_lo_test PRIVATE
     ${CMAKE_SOURCE_DIR}/include/lio3d
 )
 
+add_executable(ndt_inc_lo_test ndt_inc_lo_test.cpp)
+target_link_libraries(ndt_inc_lo_test lo NDT tools pcl_conversions::pcl_conversions gtest glog::glog ${GFLAGS_LIBRARIES} ${PCL_LIBRARIES} Eigen3::Eigen Sophus::Sophus)
+target_include_directories(ndt_inc_lo_test PRIVATE
+    ${CMAKE_SOURCE_DIR}/include/lio3d
+)
+
 include(GoogleTest)
 gtest_discover_tests(icp_test ndt_test tools_test)

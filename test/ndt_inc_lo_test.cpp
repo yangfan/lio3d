@@ -1,4 +1,4 @@
-#include "lio/ndt_lo.h"
+#include "lio/ndt_inc_lo.h"
 #include "tools/BagIO.h"
 
 #include <gflags/gflags.h>
@@ -19,26 +19,26 @@ DEFINE_string(data_path,
               "Path to save map file");
 DEFINE_bool(visualizer_on, true, "turn on visualizer");
 
-NDT_LO::PointCloud::Ptr DownSampling(NDT_LO::PointCloud::Ptr origin,
-                                     const float voxel_sz) {
-  pcl::VoxelGrid<NDT_LO::Point> grid;
+NDT_INC_LO::PointCloud::Ptr DownSampling(NDT_INC_LO::PointCloud::Ptr origin,
+                                         const float voxel_sz) {
+  pcl::VoxelGrid<NDT_INC_LO::Point> grid;
   grid.setLeafSize(voxel_sz, voxel_sz, voxel_sz);
   grid.setInputCloud(origin);
 
-  NDT_LO::PointCloud::Ptr output(new NDT_LO::PointCloud);
+  NDT_INC_LO::PointCloud::Ptr output(new NDT_INC_LO::PointCloud);
   grid.filter(*output);
   return output;
 }
 
-TEST(NDT_LO, BagTest) {
-  NDT_LO::Params params;
+TEST(NDT_INC_LO, BagTest) {
+  NDT_INC_LO::Params params;
   params.viwer_on = FLAGS_visualizer_on;
-  params.ndt_params.nb_type = NDT::NeighborType::NB0;
+  params.ndt_params.nb_type = NDT_INC::NeighborType::NB0;
   params.ndt_params.vx_size = 1;
   params.ndt_params.min_vx_pt = 4;
   params.ndt_params.guess_translation = false;
 
-  NDT_LO ndt_lo(params);
+  NDT_INC_LO ndt_lo(params);
 
   double elapsed = 0.0;
   size_t cnt = 0;
@@ -48,7 +48,7 @@ TEST(NDT_LO, BagTest) {
           FLAGS_topic_name,
           [&ndt_lo, &elapsed,
            &cnt](std::unique_ptr<sensor_msgs::msg::PointCloud2> cloud) {
-            NDT_LO::PointCloud::Ptr scan(new NDT_LO::PointCloud);
+            NDT_INC_LO::PointCloud::Ptr scan(new NDT_INC_LO::PointCloud);
             pcl::fromROSMsg(*cloud, *scan);
             auto start = std::chrono::steady_clock::now();
             ndt_lo.add_scan(DownSampling(scan, 0.1));
@@ -61,11 +61,10 @@ TEST(NDT_LO, BagTest) {
             return true;
           })
       .Process();
-  // 165879 ms total
-  // average 26.7653 ms without visualizer
-  // average 49.1621 ms with visualizer
+  // average average 35.9232 ms with viewer
+  // 123069 ms total
   LOG(INFO) << "Frame processing took average " << elapsed / cnt << " ms.";
-  ndt_lo.save_map(FLAGS_data_path + "ndt_lo_map.pcd");
+  ndt_lo.save_map(FLAGS_data_path + "ndt_inc_lo_map.pcd");
 }
 
 int main(int argc, char **argv) {

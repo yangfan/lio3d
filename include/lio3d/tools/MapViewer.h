@@ -12,12 +12,12 @@
 
 class MapViewer {
 public:
-  MapViewer() : MapViewer(1.0f) {}
-  explicit MapViewer(const float lf_sz)
+  MapViewer() : MapViewer("Map Viewer", 1.0f) {}
+  explicit MapViewer(const std::string &win_name, const float lf_sz)
       : map_(new pcl::PointCloud<pcl::PointXYZI>), leaf_size_(lf_sz) {
     voxel_filter_.setLeafSize(leaf_size_, leaf_size_, leaf_size_);
-    visualizer_.setWindowName("NDT_LO");
-    visualizer_.setSize(1920, 1080);
+    visualizer_.setWindowName(win_name);
+    // visualizer_.setSize(1920, 1080);
     visualizer_.getRenderWindow()->GlobalWarningDisplayOff();
     visualizer_.addCoordinateSystem(10, "world");
   }
