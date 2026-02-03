@@ -21,6 +21,7 @@ find_package(Sophus REQUIRED)
 find_package(PCL REQUIRED)
 find_package(glog REQUIRED)
 find_package(gflags REQUIRED)
+find_package(yaml-cpp REQUIRED)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)

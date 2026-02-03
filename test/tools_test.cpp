@@ -8,7 +8,7 @@
 #include <pcl_conversions/pcl_conversions.h>
 
 DEFINE_string(bag_file,
-              "/home/fan/ssd/Projects/ros2_ws/data/bags/pointcloud/ros2_cloud2",
+              "/home/fan/ssd/Projects/ros2_ws/data/bags/ULHK/ros2_cloud2",
               "path to ros2bag file");
 DEFINE_string(topic_name, "/velodyne_points_0",
               "topic name of pointcloud data");

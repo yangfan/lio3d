@@ -26,5 +26,17 @@ target_include_directories(ndt_inc_lo_test PRIVATE
     ${CMAKE_SOURCE_DIR}/include/lio3d
 )
 
+add_executable(data_process data_process_test.cpp)
+target_link_libraries(data_process tools pcl_conversions::pcl_conversions gtest glog::glog ${GFLAGS_LIBRARIES} ${PCL_LIBRARIES} Eigen3::Eigen Sophus::Sophus)
+target_include_directories(data_process PRIVATE
+    ${CMAKE_SOURCE_DIR}/include/lio3d
+)
+
+add_executable(eskf_test eskf_test.cpp)
+target_link_libraries(eskf_test eskf tools pcl_conversions::pcl_conversions gtest glog::glog ${GFLAGS_LIBRARIES} ${PCL_LIBRARIES} Eigen3::Eigen Sophus::Sophus)
+target_include_directories(eskf_test PRIVATE
+    ${CMAKE_SOURCE_DIR}/include/lio3d
+)
+
 include(GoogleTest)
 gtest_discover_tests(icp_test ndt_test tools_test)

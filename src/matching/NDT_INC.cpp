@@ -33,7 +33,7 @@ bool NDT_INC::add_scan(PointCloudPtr scan) {
     }
     vptrs.insert(grid_[vid]->second.get());
   }
-  LOG(INFO) << "Evaluating voxels.";
+  // LOG(INFO) << "Evaluating voxels.";
 
   std::for_each(std::execution::par_unseq, vptrs.begin(), vptrs.end(),
                 [this](Voxel *vptr) { evaluate_voxel(vptr); });
@@ -71,6 +71,9 @@ void NDT_INC::evaluate_voxel(Voxel *voxel) {
     voxel->info = (voxel->cov + Eigen::Matrix3d::Identity() * 1e-3).inverse();
     voxel->initial_evaluated = true;
 
+    voxel->num_evaluated_pts += voxel->pts.size();
+    voxel->pts.clear();
+
   } else if (voxel->initial_evaluated &&
              voxel->pts.size() > params_.min_vx_pt) {
     Eigen::Matrix3d new_cov;
@@ -79,10 +82,11 @@ void NDT_INC::evaluate_voxel(Voxel *voxel) {
 
     update_mean_cov(*voxel, new_mean, new_cov);
     voxel->info = info_mat(voxel->cov);
+
+    voxel->num_evaluated_pts += voxel->pts.size();
+    voxel->pts.clear();
   }
 
-  voxel->num_evaluated_pts += voxel->pts.size();
-  voxel->pts.clear();
   return;
 }
 
@@ -90,6 +94,7 @@ bool NDT_INC::align(Sophus::SE3d &Tts, PointCloudPtr source) {
   if (grid_.empty() || source->empty()) {
     return false;
   }
+  LOG(INFO) << "source sz: " << source->size() << ", grid sz: " << grid_.size();
   if (neighbors_.empty()) {
     set_neighbors(params_.nb_type);
   }
@@ -108,15 +113,12 @@ bool NDT_INC::align(Sophus::SE3d &Tts, PointCloudPtr source) {
   std::vector<bool> valid(edge_sz, false);
 
   double last_chi2 = std::numeric_limits<double>::max();
-  int valid_cnt = 0;
 
   for (int i = 0; i < params_.iterations; ++i) {
-    double cur_chi2 = 0.0;
-    valid_cnt = 0;
 
     std::for_each(std::execution::par_unseq, idx.begin(), idx.end(),
-                  [this, &source, &Js, &es, &valid, &vptrs, &cur_chi2,
-                   &valid_cnt, &nb_num, &pose](const size_t sid) {
+                  [this, &source, &Js, &es, &valid, &vptrs, &nb_num,
+                   &pose](const size_t sid) {
                     const Eigen::Vector3d query_pt =
                         pose * pos(source->points[sid]);
                     const VoxelId cur_id = get_id(query_pt);
@@ -147,11 +149,23 @@ bool NDT_INC::align(Sophus::SE3d &Tts, PointCloudPtr source) {
                       Js[eid].block<3, 3>(0, 3) = Eigen::Matrix3d::Identity();
                       vptrs[eid] = nb_it->second->second.get();
                       valid[eid] = true;
-
-                      cur_chi2 += chi2;
-                      valid_cnt++;
                     }
                   });
+
+    double cur_chi2 = 0.0;
+    int valid_cnt = 0;
+    Mat6 H = Mat6::Zero();
+    Vec6 b = Vec6::Zero();
+    for (size_t eid = 0; eid < valid.size(); ++eid) {
+      if (valid[eid]) {
+        H += Js[eid].transpose() * vptrs[eid]->info * Js[eid];
+        b += -Js[eid].transpose() * vptrs[eid]->info * es[eid];
+
+        valid_cnt++;
+        cur_chi2 += es[eid].transpose() * vptrs[eid]->info * es[eid];
+      }
+    }
+
     if (valid_cnt < params_.min_valid) {
       return false;
     }
@@ -164,14 +178,6 @@ bool NDT_INC::align(Sophus::SE3d &Tts, PointCloudPtr source) {
     }
     last_chi2 = avg_chi2;
 
-    Mat6 H = Mat6::Zero();
-    Vec6 b = Vec6::Zero();
-    for (size_t eid = 0; eid < valid.size(); ++eid) {
-      if (valid[eid]) {
-        H += Js[eid].transpose() * vptrs[eid]->info * Js[eid];
-        b += -Js[eid].transpose() * vptrs[eid]->info * es[eid];
-      }
-    }
     Vec6 delta = H.ldlt().solve(b);
     if (std::isnan(delta[0]) || delta.norm() < params_.eps) {
       LOG(INFO) << "coverged, delta: " << delta.transpose();

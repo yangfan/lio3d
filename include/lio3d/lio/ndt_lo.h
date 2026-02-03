@@ -29,6 +29,7 @@ public:
     Sophus::SE3d Twf;
   };
 
+  NDT_LO() = default;
   NDT_LO(const Params params) : params_(params) {
     if (params_.viwer_on) {
       set_viewer(0.5);

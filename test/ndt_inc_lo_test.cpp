@@ -10,7 +10,7 @@
 #include <chrono>
 
 DEFINE_string(bag_file,
-              "/home/fan/ssd/Projects/ros2_ws/data/bags/pointcloud/ros2_cloud2",
+              "/home/fan/ssd/Projects/ros2_ws/data/bags/ULHK/ros2_cloud2",
               "path to ros2bag file");
 DEFINE_string(topic_name, "/velodyne_points_0",
               "topic name of pointcloud data");
@@ -33,6 +33,7 @@ NDT_INC_LO::PointCloud::Ptr DownSampling(NDT_INC_LO::PointCloud::Ptr origin,
 TEST(NDT_INC_LO, BagTest) {
   NDT_INC_LO::Params params;
   params.viwer_on = FLAGS_visualizer_on;
+  params.min_kf_rot_rad = 15 * M_PI / 180.0;
   params.ndt_params.nb_type = NDT_INC::NeighborType::NB0;
   params.ndt_params.vx_size = 1;
   params.ndt_params.min_vx_pt = 4;

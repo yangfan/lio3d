@@ -18,6 +18,7 @@ public:
     NDT_INC::Params ndt_params;
   };
 
+  NDT_INC_LO() = default;
   NDT_INC_LO(const Params params) : params_(params) {
     if (params_.viwer_on) {
       set_viewer(0.5);
@@ -27,6 +28,7 @@ public:
   }
 
   bool add_scan(PointCloud::Ptr scan);
+  bool add_scan(PointCloud::Ptr scan, Sophus::SE3d &estimated_pose);
 
   void set_viewer(const float sz) {
     viewer_ = std::make_unique<MapViewer>("NDT incremental LO", sz);
@@ -34,8 +36,12 @@ public:
 
   bool save_map(const std::string &file);
 
+  bool initialized() const { return initialized_; }
+
+  size_t kf_num() const { return kf_num_; }
+
 private:
-  bool initialized = false;
+  bool initialized_ = false;
 
   Sophus::SE3d last_keyframe_pose_;
 
@@ -43,8 +49,11 @@ private:
   Sophus::SE3d last_motion_;
 
   NDT_INC ndt_inc_matcher_;
+
   std::unique_ptr<MapViewer> viewer_;
   Params params_;
+
+  size_t kf_num_ = 0;
 
   bool is_keyframe(const Sophus::SE3d &cur_pose) const;
 };
