@@ -19,6 +19,10 @@ public:
   using Mat6 = Eigen::Matrix<double, 6, 6>;
   using Vec6 = Eigen::Matrix<double, 6, 1>;
   using Vec3 = Eigen::Matrix<double, 3, 1>;
+  using Mat3 = Eigen::Matrix3d;
+  using Mat18 = Eigen::Matrix<double, 18, 18>;
+  using Mat3_18 = Eigen::Matrix<double, 3, 18>;
+  using Vec18 = Eigen::Matrix<double, 18, 1>;
 
   struct Voxel {
     Voxel() = default;
@@ -69,12 +73,17 @@ public:
 
   bool align(Sophus::SE3d &Tts, PointCloudPtr source);
 
+  bool compute_Hb(const Sophus::SE3d &Tts, Mat18 &H, Vec18 &b);
+
+  void set_source(PointCloudPtr source) { source_ = source; }
+
   size_t size() const { return grid_.size(); }
 
 private:
   using VoxelInfo = std::pair<VoxelId, std::unique_ptr<Voxel>>;
   std::list<VoxelInfo> data_;
   std::unordered_map<VoxelId, std::list<VoxelInfo>::iterator, hash_pt3> grid_;
+  PointCloudPtr source_;
 
   Params params_;
 

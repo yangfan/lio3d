@@ -59,6 +59,7 @@ bool NDT_INC_LO::add_scan(PointCloud::Ptr scan, Sophus::SE3d &estimated_pose) {
   }
   if (!initialized_) {
     LOG(INFO) << "Initializing.";
+    last_keyframe_pose_ = Sophus::SE3d();
     ndt_inc_matcher_.add_scan(scan);
     if (viewer_) {
       viewer_->add_pointcloud(scan, Sophus::SE3d());
@@ -72,17 +73,17 @@ bool NDT_INC_LO::add_scan(PointCloud::Ptr scan, Sophus::SE3d &estimated_pose) {
     return false;
   }
 
-  auto aligned_scan = std::make_shared<PointCloud>();
-  pcl::transformPointCloud(*scan, *aligned_scan, guess.matrix().cast<float>());
-
   estimated_pose = guess;
 
   if (is_keyframe(estimated_pose)) {
+    auto aligned_scan = std::make_shared<PointCloud>();
+    pcl::transformPointCloud(*scan, *aligned_scan,
+                             guess.matrix().cast<float>());
     ndt_inc_matcher_.add_scan(aligned_scan);
     kf_num_++;
-  }
-  if (viewer_) {
-    viewer_->add_pointcloud(aligned_scan, estimated_pose);
+    if (viewer_) {
+      viewer_->add_pointcloud(aligned_scan, estimated_pose);
+    }
   }
   return true;
 }

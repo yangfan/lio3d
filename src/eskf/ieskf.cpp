@@ -1,7 +1,18 @@
-#include "eskf/eskf.h"
+#include "eskf/ieskf.h"
 #include <glog/logging.h>
 
-void ESKF::initialize_noise(const ImuInitializer &initializer) {
+bool IESKF::update_time(const double time) {
+  if (timestamp_ > time) {
+    LOG(INFO) << "time " << time << " is older than current: " << timestamp_;
+    return false;
+  }
+  timestamp_ = time;
+  nominal_state_.timestamp = time;
+  error_state_.timestamp = time;
+  return true;
+}
+
+void IESKF::initialize_noise(const ImuInitializer &initializer) {
   // noise_.dia_var_g_ = initializer.var_g();
   // noise_.dia_var_a_ = initializer.var_a();
   // ref
@@ -16,7 +27,8 @@ void ESKF::initialize_noise(const ImuInitializer &initializer) {
   update_time(initializer.timestamp());
   LOG(INFO) << "Noise initialized.";
 }
-void ESKF::initialize_pose(const Sophus::SE3d &Tob, const double timestamp) {
+
+void IESKF::initialize_pose(const Sophus::SE3d &Tob, const double timestamp) {
   nominal_state_.pos = Tob.translation();
   nominal_state_.rot = Tob.so3();
   set_init_pose_ = true;
@@ -24,18 +36,7 @@ void ESKF::initialize_pose(const Sophus::SE3d &Tob, const double timestamp) {
   LOG(INFO) << "Pose initialized.";
 }
 
-bool ESKF::update_time(const double time) {
-  if (timestamp_ > time) {
-    LOG(INFO) << "time " << time << " is older than current: " << timestamp_;
-    return false;
-  }
-  timestamp_ = time;
-  nominal_state_.timestamp = time;
-  error_state_.timestamp = time;
-  return true;
-}
-
-bool ESKF::predict_imu(const IMU &imu_data) {
+bool IESKF::predict_imu(const IMU &imu_data) {
   const double dt = imu_data.timestamp - nominal_state_.timestamp;
   if (timestamp_ == 0 || dt <= 0) {
     LOG(INFO) << "Invalid time interval. Skip current data.";
@@ -94,44 +95,7 @@ bool ESKF::predict_imu(const IMU &imu_data) {
   return true;
 }
 
-bool ESKF::correct_pose(const Sophus::SE3d &Tob, const double timestamp) {
-  if (timestamp < timestamp_) {
-    LOG(WARNING) << "The correction timestamp is older than the system current "
-                    "timestamp. Skip.";
-    return false;
-  }
-  // gnss_pose = Tob;
-  Eigen::Matrix<double, 6, 1> obs_err;
-  obs_err.head<3>() = Tob.translation() - nominal_state_.pos;
-  obs_err.tail<3>() = (nominal_state_.rot.inverse() * Tob.so3()).log();
-
-  Eigen::Matrix<double, 6, 18> H =
-      Eigen::Matrix<double, 6, 18>::Zero(); // jacobian of observation model
-  H.block<3, 3>(0, 0) = Eigen::Matrix3d::Identity();
-  H.block<3, 3>(3, 6) = Eigen::Matrix3d::Identity();
-
-  Eigen::Matrix<double, 6, 6> V =
-      Eigen::Matrix<double, 6, 6>::Zero(); // covariance of observation noise
-  V.diagonal() << noise_.var_gnss_pos, noise_.var_gnss_pos,
-      noise_.var_gnss_height, noise_.var_gnss_ang, noise_.var_gnss_ang,
-      noise_.var_gnss_ang;
-  Eigen::Matrix<double, 18, 6> K =
-      cov_ * H.transpose() *
-      ((H * cov_ * H.transpose() + V).inverse()); // Kalman gain
-
-  Eigen::Matrix<double, 18, 1> err_state = K * obs_err;
-  error_state_ = IMUState(err_state);
-  cov_ = (Eigen::Matrix<double, 18, 18>::Identity() - K * H) * cov_.eval();
-
-  correct_state();
-
-  reset_error();
-  update_time(timestamp);
-
-  return true;
-}
-
-bool ESKF::correct_state() {
+bool IESKF::correct_state() {
   nominal_state_.pos += error_state_.pos;
   nominal_state_.vel += error_state_.vel;
   nominal_state_.rot *= error_state_.rot;
@@ -142,7 +106,51 @@ bool ESKF::correct_state() {
   return true;
 }
 
-bool ESKF::reset_error() {
+bool IESKF::correct_pose(IESKF::NDT_callback compute_Hb) {
+  if (!compute_Hb) {
+    LOG(WARNING) << "Callback function does not exist.";
+    return false;
+  }
+  const Sophus::SO3d rot_0 = nominal_state_.rot;
+  Mat18 P_0 = cov_;
+  Mat18 P_k = Mat18::Zero();
+  Mat18 PH_k = Mat18::Zero();
+  // HtVinvH
+  Mat18 H = Mat18::Zero();
+  // HtVinv(z - h)
+  Vec18 b = Vec18::Zero();
+
+  for (size_t i = 0; i < params_.iterations; ++i) {
+    const Eigen::Vector3d dtheta = (nominal_state_.rot.inverse() * rot_0).log();
+    Mat18 J_k = Mat18::Identity();
+    J_k.block<3, 3>(6, 6) =
+        Eigen::Matrix3d::Identity() - 0.5 * Sophus::SO3d::hat(dtheta);
+    P_k = J_k * P_0 * J_k.transpose();
+
+    compute_Hb(state_SE3(), H, b);
+    H = H * params_.scaling;
+    b = b * params_.scaling;
+
+    PH_k = (P_k.inverse() + H).inverse();
+    Vec18 err_state = PH_k * b;
+    error_state_ = IMUState(err_state);
+
+    correct_state();
+
+    LOG(INFO) << "It " << i << " err state norm: " << err_state.norm();
+
+    if (err_state.norm() < params_.eps) {
+      break;
+    }
+  }
+  cov_ = (Mat18::Identity() - PH_k * H) * P_k;
+
+  reset_error();
+
+  return true;
+}
+
+bool IESKF::reset_error() {
   Eigen::Matrix<double, 18, 18> J =
       Eigen::Matrix<double, 18, 18>::Identity(); // jacobian of reset function
   J.block<3, 3>(6, 6) = Eigen::Matrix3d::Identity() -

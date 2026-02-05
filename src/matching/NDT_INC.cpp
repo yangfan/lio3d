@@ -261,3 +261,90 @@ void NDT_INC::set_neighbors(const NeighborType type) {
     };
   }
 }
+
+bool NDT_INC::compute_Hb(const Sophus::SE3d &Tts, Mat18 &H, Vec18 &b) {
+  if (grid_.empty() || source_->empty()) {
+    LOG(WARNING) << "Empty source point cloud or grid.";
+    return false;
+  }
+  LOG(INFO) << "source sz: " << source_->size()
+            << ", grid sz: " << grid_.size();
+  if (neighbors_.empty()) {
+    set_neighbors(params_.nb_type);
+  }
+  const size_t sz = source_->size();
+  size_t nb_num = neighbors_.size();
+  const size_t edge_sz = sz * nb_num;
+
+  Sophus::SE3d pose = Tts;
+
+  std::vector<size_t> idx(sz);
+  std::iota(idx.begin(), idx.end(), 0);
+
+  std::vector<Mat3, Eigen::aligned_allocator<Mat3>> Js(edge_sz);
+  std::vector<Vec3, Eigen::aligned_allocator<Vec3>> es(edge_sz);
+  std::vector<Voxel *> vptrs(edge_sz, nullptr);
+  std::vector<bool> valid(edge_sz, false);
+
+  std::for_each(
+      std::execution::par_unseq, idx.begin(), idx.end(),
+      [this, &Js, &es, &valid, &vptrs, &nb_num, &pose](const size_t sid) {
+        const Eigen::Vector3d query_pt = pose * pos(source_->points[sid]);
+        const VoxelId cur_id = get_id(query_pt);
+
+        for (size_t nid = 0; nid < nb_num; ++nid) {
+
+          const auto &nb = neighbors_[nid];
+          auto nb_it = grid_.find(cur_id + nb);
+          const size_t eid = sid * nb_num + nid;
+
+          if (nb_it == grid_.end() ||
+              !nb_it->second->second->initial_evaluated) {
+            valid[eid] = false;
+            continue;
+          }
+          const Voxel &voxel = *(nb_it->second->second);
+          es[eid] = query_pt - voxel.mean;
+          const double chi2 = es[eid].transpose() * voxel.info * es[eid];
+
+          if (std::isnan(chi2) || chi2 > params_.chi2_th) {
+            valid[eid] = false;
+            continue;
+          }
+          Js[eid] = -pose.so3().matrix() *
+                    Sophus::SO3d::hat(pos(source_->points[sid]));
+          vptrs[eid] = nb_it->second->second.get();
+          valid[eid] = true;
+        }
+      });
+
+  double cur_chi2 = 0.0;
+  int valid_cnt = 0;
+
+  H.setZero();
+  b.setZero();
+
+  for (size_t eid = 0; eid < valid.size(); ++eid) {
+    if (valid[eid]) {
+      const Eigen::Matrix3d &info = vptrs[eid]->info;
+      Mat3_18 J_j = Mat3_18::Zero();
+      J_j.block<3, 3>(0, 0) = Eigen::Matrix3d::Identity();
+      J_j.block<3, 3>(0, 6) = Js[eid];
+
+      H += J_j.transpose() * info * J_j;
+      b += -J_j.transpose() * info * es[eid];
+
+      valid_cnt++;
+      cur_chi2 += es[eid].transpose() * vptrs[eid]->info * es[eid];
+    }
+  }
+
+  if (valid_cnt < params_.min_valid) {
+    return false;
+  }
+  const double avg_chi2 = cur_chi2 / valid_cnt;
+  LOG(INFO) << "cur_chi2: " << cur_chi2 << ", valid_cnt: " << valid_cnt
+            << ", avg_chi2: " << avg_chi2;
+
+  return true;
+}

@@ -38,5 +38,11 @@ target_include_directories(eskf_test PRIVATE
     ${CMAKE_SOURCE_DIR}/include/lio3d
 )
 
+add_executable(ieskf_test ieskf_test.cpp)
+target_link_libraries(ieskf_test eskf ieskf tools pcl_conversions::pcl_conversions gtest glog::glog ${GFLAGS_LIBRARIES} ${PCL_LIBRARIES} Eigen3::Eigen Sophus::Sophus)
+target_include_directories(ieskf_test PRIVATE
+    ${CMAKE_SOURCE_DIR}/include/lio3d
+)
+
 include(GoogleTest)
 gtest_discover_tests(icp_test ndt_test tools_test)
