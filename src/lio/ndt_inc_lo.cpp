@@ -50,7 +50,11 @@ bool NDT_INC_LO::save_map(const std::string &file) {
   if (!viewer_) {
     return false;
   }
-  return viewer_->save_map(file);
+  viewer_->save_map(file);
+  LOG(INFO) << "Saved map at " << file;
+  LOG(INFO) << "Close viewer to stop program.";
+  viewer_->spin();
+  return true;
 }
 
 bool NDT_INC_LO::add_scan(PointCloud::Ptr scan, Sophus::SE3d &estimated_pose) {
@@ -84,6 +88,7 @@ bool NDT_INC_LO::add_scan(PointCloud::Ptr scan, Sophus::SE3d &estimated_pose) {
     if (viewer_) {
       viewer_->add_pointcloud(aligned_scan, estimated_pose);
     }
+    last_keyframe_pose_ = estimated_pose;
   }
   return true;
 }

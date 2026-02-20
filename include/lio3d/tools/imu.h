@@ -1,7 +1,7 @@
 #pragma once
 
 #include <Eigen/Core>
-#include <sophus/so3.hpp>
+#include <sophus/se3.hpp>
 
 #include <memory>
 
@@ -27,6 +27,8 @@ struct IMUState {
     res << pos, vel, rot.log(), bias_g, bias_a, gravity;
     return res;
   }
+  Sophus::SE3d SE3() const { return Sophus::SE3d(rot, pos); }
+
   double timestamp{0.0};
   Eigen::Vector3d pos = Eigen::Vector3d::Zero();
   Eigen::Vector3d vel = Eigen::Vector3d::Zero();

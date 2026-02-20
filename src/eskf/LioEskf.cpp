@@ -209,7 +209,8 @@ void LioEskf::correct() {
 
   LOG(INFO) << "before correction: " << T_W_Ie.translation().transpose();
   eskf_.correct_pose(T_W_Ie, states_.back().timestamp);
-  LOG(INFO) << "after correction: " << states_.back().pos.transpose();
+  LOG(INFO) << "after correction: "
+            << eskf_.state().SE3().translation().transpose();
 }
 
 Sophus::SE3d LioEskf::integrate_imu(const IMUState &state,

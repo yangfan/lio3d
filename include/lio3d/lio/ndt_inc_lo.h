@@ -12,8 +12,8 @@ public:
   using Point = pcl::PointXYZI;
   using PointCloud = pcl::PointCloud<Point>;
   struct Params {
-    double min_kf_dist = 0.5;
-    double min_kf_rot_rad = 30 * M_PI / 180.0;
+    double min_kf_dist = 1.0;
+    double min_kf_rot_rad = 10 * M_PI / 180.0;
     bool viwer_on = false;
     NDT_INC::Params ndt_params;
   };
