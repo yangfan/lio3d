@@ -22,6 +22,8 @@ void IESKF::initialize_noise(const ImuInitializer &initializer) {
       Eigen::Vector3d::Ones() * std::sqrt(initializer.var_a()[0]);
   nominal_state_.gravity = initializer.gravity();
   nominal_state_.vel = Eigen::Vector3d::Zero(); // static status
+  nominal_state_.bias_a = initializer.bias_a();
+  nominal_state_.bias_g = initializer.bias_g();
   cov_ = Eigen::Matrix<double, 18, 18>::Identity() * 1e-4;
   set_init_noise_ = true;
   update_time(initializer.timestamp());

@@ -245,5 +245,8 @@ Sophus::SE3d LioIeskf::interpolation(const double ratio, const IMUState &state0,
 void LioIeskf::save_map(const std::string &map_file) {
   if (viewer_) {
     viewer_->save_map(map_file);
+    LOG(INFO) << "Saved map to " << map_file;
+    LOG(INFO) << "Close viewer to stop the program.";
+    viewer_->spin();
   }
 }
