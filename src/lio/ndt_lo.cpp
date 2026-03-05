@@ -59,7 +59,11 @@ bool NDT_LO::is_keyframe(const Frame &frame) const {
 bool NDT_LO::save_map(const std::string &file) {
   if (!viewer_) {
     pcl::io::savePCDFile(file, *map_);
-    return true;
+    return false;
   }
-  return viewer_->save_map(file);
+  viewer_->save_map(file);
+  LOG(INFO) << "Saved map at " << file;
+  LOG(INFO) << "Close viewer to stop program.";
+  viewer_->spin();
+  return true;
 }

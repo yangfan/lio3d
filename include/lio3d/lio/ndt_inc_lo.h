@@ -40,6 +40,10 @@ public:
 
   size_t kf_num() const { return kf_num_; }
 
+  void set_viewer_dir(const Eigen::Vector3d &dir) {
+    viewer_->set_forward_dir(dir);
+  }
+
 private:
   bool initialized_ = false;
 

@@ -39,6 +39,7 @@ TEST(NDT_LO, BagTest) {
   params.ndt_params.guess_translation = false;
 
   NDT_LO ndt_lo(params);
+  ndt_lo.set_viewer_dir(Eigen::Vector3d(-1.0, 0, 0));
 
   double elapsed = 0.0;
   size_t cnt = 0;

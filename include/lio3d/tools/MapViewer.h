@@ -35,6 +35,8 @@ public:
 
   void spin() { visualizer_.spin(); }
 
+  void set_forward_dir(const Eigen::Vector3d dir) { forward_dir_ = dir; }
+
 private:
   pcl::PointCloud<pcl::PointXYZI>::Ptr map_;
   pcl::visualization::PCLVisualizer visualizer_;
@@ -43,4 +45,5 @@ private:
   size_t max_pt_num_ = 600000;
   bool initialized_ = false;
   size_t kf_num_ = 0;
+  Eigen::Vector3d forward_dir_ = Eigen::Vector3d(0, -1, 0);
 };

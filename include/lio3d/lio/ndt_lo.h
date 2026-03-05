@@ -47,6 +47,10 @@ public:
 
   bool save_map(const std::string &file);
 
+  void set_viewer_dir(const Eigen::Vector3d &dir) {
+    viewer_->set_forward_dir(dir);
+  }
+
 private:
   PointCloud::Ptr map_;
   std::deque<std::unique_ptr<Frame>> keyframes_;
