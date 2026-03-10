@@ -27,8 +27,13 @@ Probelm statement: given target and source point cloud, compute pose where sourc
 4. Solution is the optimized pose $x^* = [R^*, t^*]^T$
 5. C++ parallel algorithm is used to accelerate optimization.
 
-- [source code](src/matching/NDT.cpp)
-- [unit test](test/ndt_test.cpp): `./test/ndt_test`
+- code
+  - [source code](src/matching/NDT.cpp)
+  - [unit test](test/ndt_test.cpp): `./test/ndt_test`
+
+  - blue: target cloud, green source cloud, red: aligned cloud.
+
+      <img src="./doc/ndt_alignment.png" width="300" alt="ndt alignment">
 
 #### Incremental NDT
 
@@ -40,7 +45,8 @@ Goal: Build target grid incrementally, limit number of voxel cells, accelerate a
 2. Limit number of grid cell and delte cells that are not updated for a long time. A LRU cache is implemented for this purpose.
 3. To have better numerical stability, the inverse of covariance matrix, i.e., information matrix is computed by SVD.
 
-- [source code](src/matching/NDT_INC.cpp)
+- code
+  - [source code](src/matching/NDT_INC.cpp)
 
 #### ICP 3D
 
@@ -86,10 +92,16 @@ Goal: given pointcloud, estimate global pose at each timestamp.
 
   - [unit test](test/ndt_lo_test.cpp): `./test/ndt_lo_test`
 
+  <img src="./doc/ndt_lo.gif" width="500" alt="ndt lo">
+
 - Incremental NDT LO
   - [source code](src/lio/ndt_inc_lo.cpp)
 
   - [unit test](test/ndt_inc_lo_test.cpp): `./test/ndt_inc_lo_test`
+
+  <img src="./doc/ndt_inc_lo.gif" width="500" alt="ndt inc lo">
+
+<img src="./doc/ndt_lo.png" width="600" alt="ndt map">
 
 ### ESKF Lidar-Inertial Odometry
 
@@ -107,6 +119,10 @@ Goal: Estimate the state of robot at each timestamp by loosely fusing lidar scan
 
 - [source code](src/eskf/LioEskf.cpp)
 - [unit test](test/eskf_test.cpp): `./test/eskf_test`
+
+  <img src="./doc/eskf.gif" width="500" alt="eskf">
+
+<img src="./doc/NCLT.png" width="600" alt="nclt map">
 
 ### Iterative ESKF Lidar-Inertial Odometry
 
@@ -127,6 +143,8 @@ Goal: Estimate the state of robot at each timestamp by tightly fusing lidar scan
 
 - [source code](src/eskf/LioIeskf.cpp)
 - [unit test](test/ieskf_test.cpp): `./test/ieskf_test`
+
+  <img src="./doc/ieskf.gif" width="500" alt="ieskf">
 
 ### Dataset
 
